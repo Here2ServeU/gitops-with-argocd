@@ -1,27 +1,31 @@
-# GitOps with ArgoCD
+# GitOps with ArgoCD for Secure Kubernetes App Delivery
 
-## Overview
+## Real-World Use Case
 
-This project showcases a production-ready GitOps workflow using ArgoCD to manage Kubernetes applications declaratively. It supports Helm charts, integrates Sealed Secrets for secure secret management, and enables continuous delivery with auto-sync and self-healing capabilities.
+This project demonstrates how a DevOps team at a fintech company can use GitOps principles with ArgoCD to securely and continuously deploy a customer-facing microservice to an EKS cluster. The team integrates Helm for configuration management and Sealed Secrets for compliance-friendly secret handling. This approach eliminates drift, enables auditability, and allows developers to promote changes via Git merges rather than manual kubectl actions.
 
 ---
 
-## Key Features
+## Scenario: Secure Deployment of a Customer API
 
-- Git-based declarative application management
-- Continuous delivery with ArgoCD
-- Sealed Secrets for secure secret handling
-- Helm chart support
-- Auto-sync and drift detection
+**Business Case:**  
+A fintech company needs to deploy a customer management microservice (`customer-api`) to Kubernetes with strict compliance rules around secret handling (e.g., API keys, DB credentials). It must be version-controlled, auditable, and automatically deployed to EKS with minimal manual steps.
+
+**Tech Goals:**  
+- Git as the single source of truth
+- Use ArgoCD for deployment
+- Store secrets securely (e.g., API_KEY, DB_PASSWORD)
+- Ensure environments self-heal if drift occurs
 
 ---
 
 ## Tech Stack
 
-- Kubernetes
-- ArgoCD
-- Helm
-- Bitnami Sealed Secrets
+- **Kubernetes** (EKS)
+- **ArgoCD** for GitOps
+- **Helm** for templating
+- **Sealed Secrets** for secure secret management
+- **eksctl** for infrastructure provisioning
 
 ---
 
@@ -30,45 +34,43 @@ This project showcases a production-ready GitOps workflow using ArgoCD to manage
 ```
 .
 ├── manifests/
-│   ├── application.yaml        # ArgoCD application manifest (or move it here if it's under templates/)
-│   └── sealed-secret.yaml      # Example of a sealed secret
+│   ├── application.yaml          # ArgoCD application manifest
+│   ├── sealed-secret.yaml        # Encrypted secret for Kubernetes
+│   └── kustomization.yaml        # Optional Kustomize file
+├── charts/
+│   └── customer-api/             # Helm chart for the microservice
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│           ├── deployment.yaml
+│           └── service.yaml
+├── secrets/
+│   └── secret.json               # Temporary unsealed secret (not committed)
+├── scripts/
+│   └── bootstrap.sh              # Optional setup script
 ├── README.md
-```
-
-> If you accidentally saved your ArgoCD application manifest inside `manifests/templates/`, either:
-> - Move it: `mv manifests/templates/application.yaml manifests/application.yaml`
-> - Or apply from that path: `kubectl apply -f manifests/templates/application.yaml`
-
-Always verify the file exists:
-
-```bash
-ls -l manifests/application.yaml
-```
-
-Or:
-
-```bash
-ls -l manifests/templates/application.yaml
 ```
 
 ---
 
-## Getting Started
+## Setup Steps
 
-### Step 1: Clone the Repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Here2ServeU/gitops-with-argocd.git
 cd gitops-with-argocd
 ```
 
-### Step 2: Create EKS Cluster (Optional)
+### 2. (Optional) Create the EKS Cluster
 
 ```bash
 eksctl create cluster --name gitops-cluster --region us-east-1 --nodes 2
 ```
 
-### Step 3: Install ArgoCD
+---
+
+### 3. Install ArgoCD
 
 ```bash
 kubectl create namespace argocd
@@ -76,75 +78,87 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-Access ArgoCD UI at: [https://localhost:8080](https://localhost:8080)
-
-To retrieve the initial admin password:
+Login password:
 
 ```bash
 kubectl get secret argocd-initial-admin-secret -n argocd   -o jsonpath="{.data.password}" | base64 -d && echo
 ```
 
-### Step 4: Deploy the Application
+---
 
-Edit `application.yaml` to point to your Git repository, then apply:
+### 4. Deploy the ArgoCD Application
+
+Update `application.yaml` to point to this repo. Then:
 
 ```bash
 kubectl apply -f manifests/application.yaml
 ```
 
-Or if it's inside `manifests/templates/`:
+---
+
+### 5. Manage Secrets with Sealed Secrets
+
+#### Step A: Create Your Secret
 
 ```bash
-kubectl apply -f manifests/templates/application.yaml
+kubectl create secret generic customer-api-secret --from-literal=API_KEY='prod_key_123' --dry-run=client -o json > secrets/secret.json
 ```
 
-### Step 5: Manage Secrets Securely
-
-Create and seal your secret:
-
-```bash
-kubectl create secret generic my-secret --from-literal=password='s3cr3t' --dry-run=client -o json > secret.json
-```
-
-Install the Sealed Secrets controller (if not already installed):
+#### Step B: Install the Controller
 
 ```bash
 kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.23.0/controller.yaml
 ```
 
-Seal the secret:
+#### Step C: Install `kubeseal`
+
+**macOS:** `brew install kubeseal`  
+**Linux:** Use the release tarball  
+**Windows:** Download `kubeseal.exe` and add to your PATH
+
+#### Step D: Seal the Secret
 
 ```bash
-kubeseal --controller-namespace kube-system --format yaml < secret.json > manifests/sealed-secret.yaml
-```
-
-Apply the sealed secret:
-
-```bash
+kubeseal --controller-namespace kube-system --format yaml < secrets/secret.json > manifests/sealed-secret.yaml
 kubectl apply -f manifests/sealed-secret.yaml
 ```
 
 ---
 
-## Usage
+## Notes on Helm Chart
 
-Use this project to enable GitOps in your Kubernetes environments. ArgoCD continuously watches your Git repository and ensures your cluster remains in sync with the declared state, enabling safe and auditable deployments.
+Edit values in `charts/customer-api/values.yaml` to adjust environment-specific settings like:
 
-If you get an error like:
+```yaml
+image:
+  repository: your-registry/customer-api
+  tag: v1.0.0
 
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
 ```
-Failed to load target state: ... error reading helm chart from .../Chart.yaml: no such file or directory
-```
-
-Then:
-- Either remove the `helm:` block from your `application.yaml` if you're not using Helm
-- Or ensure the folder has a valid `Chart.yaml` and `templates/` directory for Helm charts
 
 ---
 
-##  Teardown (Optional)
+## Troubleshooting Common Errors
 
-To remove all EKS resources:
+**Missing Chart.yaml?**
+
+- Ensure `charts/customer-api/Chart.yaml` exists
+- If not using Helm, remove the `helm:` block from `application.yaml`
+
+**Secret not decrypted?**
+
+- Make sure the controller is running:
+  ```bash
+  kubectl get pods -n kube-system | grep sealed-secrets
+  ```
+
+---
+
+## Cleanup
 
 ```bash
 eksctl delete cluster --name gitops-cluster --region us-east-1
@@ -152,29 +166,15 @@ eksctl delete cluster --name gitops-cluster --region us-east-1
 
 ---
 
-## Author
+## 👤 Author
 
-**Emmanuel Naweji, 2025**  
+**Emmanuel Naweji**  
 Cloud | DevOps | SRE | FinOps | AI Engineer  
-Helping businesses modernize infrastructure and guiding engineers into the top 1% through real-world projects and automation-first thinking.
-
-![AWS Certified](https://img.shields.io/badge/AWS-Certified-blue?logo=amazonaws)
-![Azure Solutions Architect](https://img.shields.io/badge/Azure-Solutions%20Architect-0078D4?logo=microsoftazure)
-![CKA](https://img.shields.io/badge/Kubernetes-CKA-blue?logo=kubernetes)
-![Terraform](https://img.shields.io/badge/IaC-Terraform-623CE4?logo=terraform)
-![GitHub Actions](https://img.shields.io/badge/CI/CD-GitHub%20Actions-blue?logo=githubactions)
-![GitLab CI](https://img.shields.io/badge/CI/CD-GitLab%20CI-FC6D26?logo=gitlab)
-![Jenkins](https://img.shields.io/badge/CI/CD-Jenkins-D24939?logo=jenkins)
-![Ansible](https://img.shields.io/badge/Automation-Ansible-red?logo=ansible)
-![ArgoCD](https://img.shields.io/badge/GitOps-ArgoCD-orange?logo=argo)
-![VMware](https://img.shields.io/badge/Virtualization-VMware-607078?logo=vmware)
-![Linux](https://img.shields.io/badge/OS-Linux-black?logo=linux)
-![FinOps](https://img.shields.io/badge/FinOps-Cost%20Optimization-green?logo=money)
-![OpenAI](https://img.shields.io/badge/AI-OpenAI-ff9900?logo=openai)
+Helping businesses build secure and scalable infrastructure using GitOps and automation-first strategies.
 
 ---
 
-## 🔗 Connect with Me
+## Let's Connect
 
 - [LinkedIn](https://www.linkedin.com/in/ready2assist/)
 - [GitHub](https://github.com/Here2ServeU)
@@ -182,8 +182,8 @@ Helping businesses modernize infrastructure and guiding engineers into the top 1
 
 ---
 
-## 📞 Book a Free Consultation
+## Free Consultation
 
-Ready to implement GitOps or scale your Kubernetes platform?  
-[Schedule a free 1:1 consultation](https://bit.ly/letus-meet)
+Want help implementing GitOps at your company?  
+[Book a session](https://bit.ly/letus-meet)
 
