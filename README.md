@@ -30,9 +30,25 @@ This project showcases a production-ready GitOps workflow using ArgoCD to manage
 ```
 .
 ├── manifests/
-│   ├── application.yaml        # ArgoCD application manifest
+│   ├── application.yaml        # ArgoCD application manifest (or move it here if it's under templates/)
 │   └── sealed-secret.yaml      # Example of a sealed secret
 ├── README.md
+```
+
+> If you accidentally saved your ArgoCD application manifest inside `manifests/templates/`, either:
+> - Move it: `mv manifests/templates/application.yaml manifests/application.yaml`
+> - Or apply from that path: `kubectl apply -f manifests/templates/application.yaml`
+
+Always verify the file exists:
+
+```bash
+ls -l manifests/application.yaml
+```
+
+Or:
+
+```bash
+ls -l manifests/templates/application.yaml
 ```
 
 ---
@@ -76,13 +92,35 @@ Edit `application.yaml` to point to your Git repository, then apply:
 kubectl apply -f manifests/application.yaml
 ```
 
+Or if it's inside `manifests/templates/`:
+
+```bash
+kubectl apply -f manifests/templates/application.yaml
+```
+
 ### Step 5: Manage Secrets Securely
 
 Create and seal your secret:
 
 ```bash
 kubectl create secret generic my-secret --from-literal=password='s3cr3t' --dry-run=client -o json > secret.json
-kubeseal --format yaml < secret.json > manifests/sealed-secret.yaml
+```
+
+Install the Sealed Secrets controller (if not already installed):
+
+```bash
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.23.0/controller.yaml
+```
+
+Seal the secret:
+
+```bash
+kubeseal --controller-namespace kube-system --format yaml < secret.json > manifests/sealed-secret.yaml
+```
+
+Apply the sealed secret:
+
+```bash
 kubectl apply -f manifests/sealed-secret.yaml
 ```
 
@@ -92,9 +130,19 @@ kubectl apply -f manifests/sealed-secret.yaml
 
 Use this project to enable GitOps in your Kubernetes environments. ArgoCD continuously watches your Git repository and ensures your cluster remains in sync with the declared state, enabling safe and auditable deployments.
 
+If you get an error like:
+
+```
+Failed to load target state: ... error reading helm chart from .../Chart.yaml: no such file or directory
+```
+
+Then:
+- Either remove the `helm:` block from your `application.yaml` if you're not using Helm
+- Or ensure the folder has a valid `Chart.yaml` and `templates/` directory for Helm charts
+
 ---
 
-## Teardown (Optional)
+##  Teardown (Optional)
 
 To remove all EKS resources:
 
@@ -126,7 +174,7 @@ Helping businesses modernize infrastructure and guiding engineers into the top 1
 
 ---
 
-## Connect with Me
+## 🔗 Connect with Me
 
 - [LinkedIn](https://www.linkedin.com/in/ready2assist/)
 - [GitHub](https://github.com/Here2ServeU)
@@ -134,7 +182,7 @@ Helping businesses modernize infrastructure and guiding engineers into the top 1
 
 ---
 
-## Book a Free Consultation
+## 📞 Book a Free Consultation
 
 Ready to implement GitOps or scale your Kubernetes platform?  
 [Schedule a free 1:1 consultation](https://bit.ly/letus-meet)
