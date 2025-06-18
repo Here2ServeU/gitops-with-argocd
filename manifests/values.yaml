@@ -1,0 +1,8 @@
+spec:
+  source:
+    repoURL: https://github.com/Here2ServeU/gitops-with-argocd
+    targetRevision: HEAD
+    path: manifests
+    helm:
+      valueFiles:
+        - values.yaml

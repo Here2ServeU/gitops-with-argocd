@@ -8,8 +8,8 @@ spec:
     namespace: default
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://github.com/your-username/sample-app-configs
-    path: helm-chart
+    repoURL: https://github.com/Here2ServeU/gitops-with-argocd
+    path: manifests/templates
     targetRevision: HEAD
     helm:
       valueFiles:
